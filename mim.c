@@ -1,34 +1,73 @@
+/*** includes ***/
+
 #include <ctype.h>
+#include <errno.h>
+#include <error.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <termios.h>
 #include <unistd.h>
 
+/*** defines ***/
+#define CTRL_KEY(k) ((k) & 0x1f)
+
+/*** data ***/
+
 struct termios original_termios;
 
-void disableRawMode() { tcsetattr(STDIN_FILENO, TCSAFLUSH, &original_termios); }
+/*** terminal ***/
+
+void die(const char *s) {
+  perror(s);
+  exit(1);
+}
+
+void disableRawMode() {
+  if (tcsetattr(STDIN_FILENO, TCSAFLUSH, &original_termios) == -1) {
+    die("tcsetattr");
+  }
+}
 
 void enableRawMode() {
-  tcgetattr(STDIN_FILENO, &original_termios);
+  if (tcgetattr(STDIN_FILENO, &original_termios)) {
+    die("tcgetattr");
+  }
   atexit(disableRawMode);
 
   struct termios raw = original_termios;
-  raw.c_iflag &= ~(IXON);
-  raw.c_lflag &= ~(ECHO | ICANON + ISIG);
+  raw.c_iflag &= ~(BRKINT | ICRNL | INPCK | ISTRIP | IXON);
+  raw.c_oflag &= ~(OPOST);
+  raw.c_cflag &= (CS8);
+  raw.c_lflag &= ~(ECHO | ICANON | IEXTEN | ISIG);
+  raw.c_cc[VMIN] = 0;
+  raw.c_cc[VTIME] = 1;
 
-  tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw);
+  if (tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw) == -1) {
+    die("tcsetattr");
+  }
 }
+
+/*** init ***/
 
 int main(void) {
   enableRawMode();
 
-  char c;
-  while (read(STDIN_FILENO, &c, 1 && c != 'q') == 1) {
+  while (1) {
+    char c = '\0';
+    if (read(STDIN_FILENO, &c, 1) == -1 && errno != EAGAIN) {
+      die("tcsetattr");
+    }
+
     if (iscntrl(c)) {
-      printf("%d\n", c);
+      printf("%d\r\n", c);
     } else {
-      printf("%d ('%c')\n", c, c);
+      printf("%d ('%c')\r\n", c, c);
+    }
+
+    if (c == CTRL_KEY('q')) {
+      break;
     }
   }
+
   return 0;
 }
