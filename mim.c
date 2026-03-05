@@ -41,12 +41,15 @@ enum editorKey {
   PAGE_DOWN
 };
 
+enum editorHighlight { HL_NORMAL = 0, HL_NUMBER };
+
 /*** data ***/
 typedef struct erow {
   int size;
   int rsize;
   char *chars;
   char *render;
+  unsigned char *hl;
 } erow_t;
 
 struct editorConfig {
@@ -288,6 +291,7 @@ void editorInsertRow(int at, char *s, size_t len) {
 
   E.row[at].rsize = 0;
   E.row[at].render = NULL;
+  E.row[at].hl = NULL;
   editorUpdateRow(&E.row[at]);
 
   E.numrows++;
@@ -297,6 +301,7 @@ void editorInsertRow(int at, char *s, size_t len) {
 void editorFreeRow(erow_t *row) {
   free(row->render);
   free(row->chars);
+  free(row->hl);
 }
 
 void editorDelRow(int at) {
@@ -641,7 +646,16 @@ void editorDrawRows(struct abuf *ab) {
       if (len > E.screencols) {
         len = E.screencols;
       }
-      abAppend(ab, &E.row[filerow].render[E.coloff], len);
+      char *c = &E.row[filerow].render[E.coloff];
+      for (int j = 0; j < len; j++) {
+        if (isdigit(c[j])) {
+          abAppend(ab, "\x1b[31m", 5);
+          abAppend(ab, &c[j], 1);
+          abAppend(ab, "\x1b[39m", 5);
+        } else {
+          abAppend(ab, &c[j], 1);
+        }
+      }
     }
 
     abAppend(ab, "\x1b[K", 3);
